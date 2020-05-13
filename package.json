@@ -1,0 +1,14 @@
+{
+  "name": "promise-mock",
+  "version": "1.0.0",
+  "description": "模仿 Promise 的实现",
+  "main": "test.js",
+  "scripts": {
+    "test": "promises-aplus-tests  test/test.js"
+  },
+  "author": "swcheng",
+  "license": "ISC",
+  "devDependencies": {
+    "promises-aplus-tests": "*"
+  }
+}
