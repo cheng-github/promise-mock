@@ -2,16 +2,17 @@
 const PEDDING = 0;
 const FUFILLED = 1;
 const REJECTED = 2;
-const IS_ERROR =  {};
-var LAST_ERROR = null;
+
+const IS_ERROR = {};
+const ERROR_REASON = null;
 
 function empty() {
 
 }
 
 function Promise(fn) {
-    this.state = PEDDING;
-    this.deferred = [];
+    this._state = PEDDING;
+    this._deferreds = [];
     if (fn === empty) {
         return;
     }
@@ -24,7 +25,7 @@ function getThen(value) {
         result = value.then;
     } catch(e) {
         result = IS_ERROR;
-        LAST_ERROR = e;
+        ERROR_REASON = e;
     }
 }
 
@@ -39,24 +40,41 @@ function resolve(promise, value) {
         (typeof value === "object" || typeof value === "function")) {
         let then = getThen(value);
         if (then === IS_ERROR) {
-            reject(promise, LAST_ERROR);
+            reject(promise, ERROR_REASON);
             return;
         }
-        if (then === promise.then && value instanceof Promise) {
-            
+        // 2.3.2 adopt its state
+        if (then === Promise.prototype.then && value instanceof Promise) {
+            for (let task of promise._deferreds) {
+                handle(value, task);
+            }
+            promise = value;
+            return;
+        }
+        // 2.3.3.3 if then is a function
+        if (typeof then === "function") {
+          /* 这样写的话，我们是假设了 value.then 只会调用 resolve 或 reject，但是这是不可靠的，
+             所以，此处可以复用 doResolve 的逻辑
+            value.then(function(value){
+                resolve(promise, value);
+            }, function(reason){
+                reject(promise, reason);
+            }); */
+            doResolve(then.bind(value), promise);
+            return;
         }
     }
-
-    
-    promise.state = FUFILLED;
-    promise.value = value;
+    // 2.3.3.4 then is not a function 
+    // 2.3.4 value is not a object or function
+    promise._state = FUFILLED;
+    promise._value = value;
     doHandler(promise, value);
 }
 
 function reject(promise, reason) {
-    promise.state = REJECTED;
-    promise.value = reason;
-    doHandler(promise, promise.deferred);
+    promise._state = REJECTED;
+    promise._value = reason;
+    doHandler(promise, promise._deferreds);
 }
 
 
@@ -85,8 +103,8 @@ function doResolve(promise, fn) {
 }
 
 function handle(promise, deferred) {
-    if (promise.state === PEDDING) {
-        promise.deferred.push(deferred);
+    if (promise._state === PEDDING) {
+        promise._deferreds.push(deferred);
         return;
     }
     
@@ -97,16 +115,16 @@ function doHandler(promise, deferreds) {
     if (deferreds.length === 0) {
         return;
     }
-    let isFulfilled = promise.state === FUFILLED;
+    let isFulfilled = promise._state === FUFILLED;
     for (let task of deferreds) {
         // 整体逻辑需异步处理，如果在最后调用的时候才使用异步，就无法获取到调用的结果传递给下一个 promise
         setTimeout(function() {
             let fn = isFulfilled ? task.fuifilled : task.rejected;
             if (!fn) {
-                isFulfilled ? resolve(promise, promise.value) : reject(promise, promise.value);
+                isFulfilled ? resolve(promise, promise._value) : reject(promise, promise._value);
             } else {
                 try {
-                    let result = fn(promise.value);
+                    let result = fn(promise._value);
                     resolve(promise, result);
                 } catch (e) {
                     reject(promise, e);
@@ -138,3 +156,17 @@ function Hanlder(promise, fuifilled, rejected) {
 }
 
 
+//This follwing content contains the ES6 extensions to the core Promises/A+ API
+Promise.resolve = function(value) {
+    return new Promise(function(resolve, reject) {
+        resolve(value);
+    });
+}
+
+Promise.reject = function(value) {
+    return new Promise(function(resolve, reject){
+        reject(value);
+    });
+}
+
+module.exports = Promise;
