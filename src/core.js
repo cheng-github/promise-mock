@@ -4,7 +4,8 @@ const FUFILLED = 1;
 const REJECTED = 2;
 
 const IS_ERROR = {};
-const ERROR_REASON = null;
+// 用了 const 真是...服了自己
+var ERROR_REASON = null;
 
 function empty() {
 
@@ -27,6 +28,7 @@ function getThen(value) {
         result = IS_ERROR;
         ERROR_REASON = e;
     }
+    return result;
 }
 
 // resolve 是复杂的地方之一，因为这里需要判断各种情况的处理
@@ -45,6 +47,11 @@ function resolve(promise, value) {
         }
         // 2.3.2 adopt its state
         if (then === Promise.prototype.then && value instanceof Promise) {
+            // 其实这里不可以简单的将 promise 指向 adopt 的 promise
+            // 原因是，在调用 then 方法的时候，我们返回了一个 promise，同时还将这个引用存放在了
+            // task 对象里面，这里仅仅是修改了第二种情况的指向，所以，正确的 adopt ，要保证两种情况都要考虑
+            // 那么，我们需要使用将该 promise 的 state 置为 adopt，并保存被 adopt 的 promise，这样就可以保证每次
+            // resolve 的时候，task 添加到了正确的位置上
             for (let task of promise._deferreds) {
                 handle(value, task);
             }
@@ -60,7 +67,7 @@ function resolve(promise, value) {
             }, function(reason){
                 reject(promise, reason);
             }); */
-            doResolve(then.bind(value), promise);
+            doResolve(promise, then.bind(value));
             return;
         }
     }
@@ -68,7 +75,7 @@ function resolve(promise, value) {
     // 2.3.4 value is not a object or function
     promise._state = FUFILLED;
     promise._value = value;
-    doHandler(promise, value);
+    doHandler(promise, promise._deferreds);
 }
 
 function reject(promise, reason) {
@@ -121,13 +128,13 @@ function doHandler(promise, deferreds) {
         setTimeout(function() {
             let fn = isFulfilled ? task.fuifilled : task.rejected;
             if (!fn) {
-                isFulfilled ? resolve(promise, promise._value) : reject(promise, promise._value);
+                isFulfilled ? resolve(task.promise, promise._value) : reject(task.promise, promise._value);
             } else {
                 try {
                     let result = fn(promise._value);
-                    resolve(promise, result);
+                    resolve(task.promise, result);
                 } catch (e) {
-                    reject(promise, e);
+                    reject(task.promise, e);
                 }
             }
         }, 0);
