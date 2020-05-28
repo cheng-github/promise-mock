@@ -2,6 +2,7 @@
 const PEDDING = 0;
 const FUFILLED = 1;
 const REJECTED = 2;
+const ADOTED = 3;
 
 const IS_ERROR = {};
 // 用了 const 真是...服了自己
@@ -55,7 +56,8 @@ function resolve(promise, value) {
             for (let task of promise._deferreds) {
                 handle(value, task);
             }
-            promise = value;
+            promise._value = value;
+            promise._state = ADOTED;
             return;
         }
         // 2.3.3.3 if then is a function
@@ -110,6 +112,9 @@ function doResolve(promise, fn) {
 }
 
 function handle(promise, deferred) {
+    while (promise._state === ADOTED) {
+        promise = promise._value;
+    }
     if (promise._state === PEDDING) {
         promise._deferreds.push(deferred);
         return;
